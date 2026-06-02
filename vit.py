@@ -18,7 +18,7 @@ class PatchEmbedding(nn.Module):
 
     def __call__(self, x):
         # B, C, H, W = x.shape
-        print(f"Input Shape: {x.shape}")
+        # print(f"Input Shape: {x.shape}")
         x = self.proj(x).flatten(1, 2) # 두번째 차원인 H/patch_size와 W/patch_size를 하나의 차원으로 합침
         return x
 
@@ -75,11 +75,68 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(self, embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1):
         # super.__init__()
-        self.norm = nn.LayerNorm(dims=2)
+        self.norm = nn.LayerNorm(dims=embed_dim)
         self.mhsa = MHSA(embed_dim=embed_dim, num_heads=num_heads)
         self.mlp = MLP(embed_dim=embed_dim, mlp_ratio=mlp_ratio, dropout_rate=dropout_rate)
     
     def __call__(self, x):
-        x, _ = self.mhsa(self.norm(x)) + x
-        x = self.mlp(self.norm(x)) + x
+        # 1단계 - attention: 뭐가 더 중요한지 확인
+        x_norm = self.norm(x) # Layer normalization
+        x_attn, _ = self.mhsa(x_norm) # MHSA
+        x = x_attn + x # Residual connection
+        
+        # 2단계 - MLP: 비선형성 증가
+        x_norm = self.norm(x) # Layer normalization
+        x_mlp = self.mlp(x_norm) # 비선형성 증가를 위한 MLP
+        x = x_mlp + x
+
         return x
+
+class ViT(nn.Module):
+    def __init__(self, patch_size=16, embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1, depth=12):
+        super().__init__()
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.mlp_ratio = mlp_ratio
+        self.dropout_rate = dropout_rate
+        self.depth = depth
+
+        self.projector = PatchEmbedding(
+            patch_size=patch_size, 
+            embed_dim=embed_dim
+            )
+        
+        self.blocks = [
+            Block(
+                embed_dim=embed_dim, 
+                num_heads=num_heads, 
+                mlp_ratio=mlp_ratio, 
+                dropout_rate=dropout_rate
+                )  for _ in range(depth)
+            ]
+
+    def __call__(self, x):
+        x = self.projector(x)
+        for i, block in enumerate(self.blocks):
+            x = block(x)
+            # print(f"{i} 번째 layer")
+        return x
+    
+if __name__=="__main__":
+
+    # tests 
+    sample = mx.random.normal([1, 224, 224, 3]) # BHWC
+
+    projector = PatchEmbedding()
+    block = Block()
+
+    patches = projector(sample)
+    print(patches.shape)
+
+    out = block(patches)
+    print(out.shape)
+
+    vit = ViT()
+    out = vit(sample)
+    print(out.shape)
