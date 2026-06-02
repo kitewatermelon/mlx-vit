@@ -41,7 +41,7 @@ class MHSA(nn.Module):
         x = self.qkv(x)
         # Q, K, V 3개로 chunk -> [BND, BND, BND]
         qkv = mx.split(x, axis=2, indices_or_sections=3) 
-        print(qkv[0].shape, qkv[1].shape, qkv[2].shape)
+        # print(qkv[0].shape, qkv[1].shape, qkv[2].shape)
         
         # 1. Q,K,V 각각 BHND로 reshape (관례)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.num_heads), qkv) 
@@ -120,9 +120,24 @@ class ViT(nn.Module):
         x = self.projector(x)
         for i, block in enumerate(self.blocks):
             x = block(x)
-            # print(f"{i} 번째 layer")
+            print(f"{i} 번째 layer")
         return x
-    
+
+def get_vit_base():
+    return ViT(patch_size=16, embed_dim=768, 
+               num_heads=12, mlp_ratio=4, 
+               dropout_rate=0.1, depth=12)
+
+def get_vit_small():
+    return ViT(patch_size=16, embed_dim=384, 
+               num_heads=6, mlp_ratio=4, 
+               dropout_rate=0.1, depth=12)
+
+def get_vit_tiny():
+    return ViT(patch_size=16, embed_dim=192, 
+               num_heads=3, mlp_ratio=4, 
+               dropout_rate=0.1, depth=12)
+
 if __name__=="__main__":
 
     # tests 
@@ -137,6 +152,14 @@ if __name__=="__main__":
     out = block(patches)
     print(out.shape)
 
-    vit = ViT()
+    vit = get_vit_base()
+    out = vit(sample)
+    print(out.shape)
+
+    vit = get_vit_small()
+    out = vit(sample)
+    print(out.shape)
+
+    vit = get_vit_tiny()
     out = vit(sample)
     print(out.shape)
