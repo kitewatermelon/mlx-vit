@@ -71,3 +71,15 @@ class MLP(nn.Module):
             )
     def __call__(self, x):
         return self.net(x)
+
+class Block(nn.Module):
+    def __init__(self, embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1):
+        # super.__init__()
+        self.norm = nn.LayerNorm(dims=2)
+        self.mhsa = MHSA(embed_dim=embed_dim, num_heads=num_heads)
+        self.mlp = MLP(embed_dim=embed_dim, mlp_ratio=mlp_ratio, dropout_rate=dropout_rate)
+    
+    def __call__(self, x):
+        x, _ = self.mhsa(self.norm(x)) + x
+        x = self.mlp(self.norm(x)) + x
+        return x
