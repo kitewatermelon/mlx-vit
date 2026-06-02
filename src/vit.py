@@ -58,3 +58,16 @@ class MHSA(nn.Module):
 
         return out, attn_weight # 최종 출력과 attn_weight 같이 출력
 
+class MLP(nn.Module):
+    def __init__(self, embed_dim=768, mlp_ratio=4, dropout_rate=0.1):
+        # super.__init__()
+        self.net = nn.Sequential(
+                nn.LayerNorm(embed_dim),
+                nn.Linear(embed_dim, embed_dim * mlp_ratio),
+                nn.GELU(),
+                nn.Dropout(dropout_rate),
+                nn.Linear(embed_dim * mlp_ratio, embed_dim ),
+                nn.Dropout(dropout_rate),
+            )
+    def __call__(self, x):
+        return self.net(x)
