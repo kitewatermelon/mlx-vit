@@ -160,6 +160,15 @@ class ViT(nn.Module):
         #         [0.533802, 1.03551, 0.735705, ..., 0.621866, 1.38191, 0.518814],
         #         [1.47414, 2.21557, 0.718046, ..., 1.56249, 0.93281, 1.08779]]], dtype=float32)
         return x
+    
+    def get_params_info(self):
+        params = self.trainable_parameters()
+        flat = mlx.utils.tree_flatten(params)
+        # flat = [("layer.weight", array), ("layer.bias", array), ...]
+        
+        total = sum(v.size for _, v in flat)  # 언패킹 필요
+        print(f"Total trainable parameters: {total:,}")
+        return total
 
 def get_vit_base():
     return ViT(patch_size=16, embed_dim=768, 
@@ -190,14 +199,21 @@ if __name__=="__main__":
     out = block(patches)
     print(out.shape)
 
+    # Total trainable parameters: 85,824,768
     vit = get_vit_base()
     out = vit(sample)
     print(out.shape)
-
+    vit.get_params_info()
+    
+    # Total trainable parameters: 21,678,720
     vit = get_vit_small()
     out = vit(sample)
     print(out.shape)
-
+    vit.get_params_info()
+    
+    # Total trainable parameters: 5,530,944
     vit = get_vit_tiny()
     out = vit(sample)
     print(out.shape)
+    vit.get_params_info()
+    
