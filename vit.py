@@ -5,12 +5,13 @@ from einops import rearrange
 # 모든 기준은 ViT-B/16 모델을 기준으로 작성
 
 class PatchEmbedding(nn.Module):
-    def __init__(self, patch_size=16, embed_dim=768):
+    def __init__(self, is_rgb=True, patch_size=16, embed_dim=768):
         super().__init__()
-        self.patch_size = patch_size # 
+        self.patch_size = patch_size
         self.embed_dim = embed_dim
+        self.in_channels = 3 if is_rgb else 1
         self.proj = nn.Conv2d(
-                in_channels=3,
+                in_channels=self.in_channels,
                 out_channels=embed_dim,
                 kernel_size=patch_size,
                 stride=patch_size
@@ -35,6 +36,8 @@ class MHSA(nn.Module):
 
         self.qkv = nn.Linear(embed_dim, embed_dim * 3, bias=False)
 
+        self.proj = nn.Linear(embed_dim, embed_dim)
+
 
     def __call__(self, x):
         # BND -> BN(3*D)
@@ -55,26 +58,30 @@ class MHSA(nn.Module):
         out = attn_weight @ v 
         # 6. 각 헤드 concat
         out = rearrange(out, 'b h n d -> b n (h d)', h = self.num_heads) # MHSA concat
-
+        # 7. concat 후 정보 섞어주기 위해 같은 차원으로 projection
+        out = self.proj(out)
         return out, attn_weight # 최종 출력과 attn_weight 같이 출력
 
 class MLP(nn.Module):
     def __init__(self, embed_dim=768, mlp_ratio=4, dropout_rate=0.1):
-        # super.__init__()
+        super().__init__() 
+        # 아래 timm-like MLP 참조함
+        # https://github.com/huggingface/pytorch-image-models/blob/main/timm/layers/mlp.py
         self.net = nn.Sequential(
-                nn.LayerNorm(embed_dim),
                 nn.Linear(embed_dim, embed_dim * mlp_ratio),
                 nn.GELU(),
                 nn.Dropout(dropout_rate),
+                nn.LayerNorm(embed_dim * mlp_ratio),
                 nn.Linear(embed_dim * mlp_ratio, embed_dim ),
                 nn.Dropout(dropout_rate),
             )
+        
     def __call__(self, x):
         return self.net(x)
 
 class Block(nn.Module):
     def __init__(self, embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1):
-        # super.__init__()
+        super().__init__()
         self.norm = nn.LayerNorm(dims=embed_dim)
         self.mhsa = MHSA(embed_dim=embed_dim, num_heads=num_heads)
         self.mlp = MLP(embed_dim=embed_dim, mlp_ratio=mlp_ratio, dropout_rate=dropout_rate)
@@ -93,7 +100,10 @@ class Block(nn.Module):
         return x
 
 class ViT(nn.Module):
-    def __init__(self, patch_size=16, embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1, depth=12):
+    """
+        cls token based ViT 
+    """
+    def __init__(self, img_size=224, patch_size=16, embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1, depth=12):
         super().__init__()
         self.patch_size = patch_size
         self.embed_dim = embed_dim
@@ -101,8 +111,12 @@ class ViT(nn.Module):
         self.mlp_ratio = mlp_ratio
         self.dropout_rate = dropout_rate
         self.depth = depth
+        self.num_patches = int((img_size // patch_size) ** 2)
 
-        self.projector = PatchEmbedding(
+        self.pos_embed = mx.zeros((1, self.num_patches + 1, embed_dim))  # 학습 가능한 파라미터로 position embedding 학습
+        self.cls_token = mx.zeros((1, 1, embed_dim)) # 학습 가능한 파라미터로 cls 토큰 학습 
+
+        self.patch_embed = PatchEmbedding(
             patch_size=patch_size, 
             embed_dim=embed_dim
             )
@@ -117,11 +131,16 @@ class ViT(nn.Module):
             ]
 
     def __call__(self, x):
-        x = self.projector(x)
+        x = self.patch_embed(x)
         for i, block in enumerate(self.blocks):
             x = block(x)
             print(f"{i} 번째 layer")
         return x
+
+    def _pos_embed(self, x):
+
+        return x
+
 
 def get_vit_base():
     return ViT(patch_size=16, embed_dim=768, 
