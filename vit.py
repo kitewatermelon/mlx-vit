@@ -116,9 +116,14 @@ class ViT(nn.Module):
         
         self.norm = nn.LayerNorm(dims=embed_dim) # final norm
 
-        # self.pos_embed = mx.ones((1, self.num_patches + 1, embed_dim))  # 학습 가능한 파라미터로 position embedding 학습
+
+        # !주의! self.cls_token은 single batch 기준으로 만들어졌기 때문에 (0번째 차원이 1), _pos_embed 매서드에서 동적으로 배치 차원을 늘려줘야 함. 
         self.pos_embed = mx.random.normal((1, self.num_patches + 1, embed_dim), scale=0.02)  # 학습 가능한 파라미터로 position embedding 학습
         self.cls_token = mx.random.normal((1, 1, embed_dim), scale=0.02) # 학습 가능한 파라미터로 cls 토큰 학습 
+
+        # FOR TEST 실제 실험 시 동작 변경!
+        # self.cls_token = mx.zeros((1, 1, embed_dim))  # 동작 확인 용 cls token
+        # self.pos_embed = mx.ones((1, self.num_patches + 1, embed_dim)) # 동작 확인 용 position embedding
 
         self.patch_embed = PatchEmbedding(
             patch_size=patch_size, 
@@ -141,13 +146,18 @@ class ViT(nn.Module):
         x = self._pos_embed(x)
         for i, block in enumerate(self.blocks):
             x = block(x)
-            print(f"{i} 번째 layer")
+            # print(f"{i} 번째 layer")
         x = self.norm(x)
         cls = x[:, 0]       # CLS token만 추출
         return self.head(cls)
 
     def _pos_embed(self, x):
-        x = mx.concatenate((self.cls_token, x), axis=1) # [cls] token N차원의 제일 앞에 concat, axis=1로 해줘야 N+1 됨. (BNC)
+        B, N, C = x.shape
+        # print(B, N, C)
+        # broadcast_to 함수로 cls token B 만큼 복제함. 
+        # numpy-like 이므로 자세한 동작은 다음 문서 참고. https://numpy.org/doc/2.2/reference/generated/numpy.broadcast_to.html
+        cls = mx.broadcast_to(self.cls_token, (B, 1, C))   
+        x = mx.concatenate((cls, x), axis=1) # [cls] token N차원의 제일 앞에 concat, axis=1로 해줘야 N+1 됨. (BNC)
         # print(x)
         # array([[[0, 0, 0, ..., 0, 0, 0], > zeros로 설정 해놓고 제대로 추가 됐는지 테스트 완료
         #         [-0.625268, 0.0861489, 0.387924, ..., 0.565768, 1.14554, 0.420791],
@@ -195,7 +205,7 @@ def get_vit_tiny():
 if __name__=="__main__":
 
     # tests 
-    sample = mx.random.normal([1, 224, 224, 3]) # BHWC
+    sample = mx.random.normal([32, 224, 224, 3]) # BHWC
 
     projector = PatchEmbedding()
     block = Block()
