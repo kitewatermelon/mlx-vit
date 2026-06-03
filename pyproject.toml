@@ -5,7 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "asitop>=0.0.24",
     "einops>=0.8.2",
     "mlx>=0.31.2",
+    "mlx-data>=0.2.0",
     "numpy>=2.4.6",
 ]
