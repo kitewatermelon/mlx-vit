@@ -113,8 +113,9 @@ class ViT(nn.Module):
         self.depth = depth
         self.num_patches = int((img_size // patch_size) ** 2)
 
-        self.pos_embed = mx.zeros((1, self.num_patches + 1, embed_dim))  # 학습 가능한 파라미터로 position embedding 학습
-        self.cls_token = mx.zeros((1, 1, embed_dim)) # 학습 가능한 파라미터로 cls 토큰 학습 
+        # self.pos_embed = mx.ones((1, self.num_patches + 1, embed_dim))  # 학습 가능한 파라미터로 position embedding 학습
+        self.pos_embed = mx.random.normal((1, self.num_patches + 1, embed_dim))  # 학습 가능한 파라미터로 position embedding 학습
+        self.cls_token = mx.random.normal((1, 1, embed_dim)) # 학습 가능한 파라미터로 cls 토큰 학습 
 
         self.patch_embed = PatchEmbedding(
             patch_size=patch_size, 
@@ -132,15 +133,33 @@ class ViT(nn.Module):
 
     def __call__(self, x):
         x = self.patch_embed(x)
+        x = self._pos_embed(x)
         for i, block in enumerate(self.blocks):
             x = block(x)
             print(f"{i} 번째 layer")
         return x
 
     def _pos_embed(self, x):
-
+        x = mx.concatenate((self.cls_token, x), axis=1) # [cls] token N차원의 제일 앞에 concat, axis=1로 해줘야 N+1 됨. (BNC)
+        # print(x)
+        # array([[[0, 0, 0, ..., 0, 0, 0], > zeros로 설정 해놓고 제대로 추가 됐는지 테스트 완료
+        #         [-0.625268, 0.0861489, 0.387924, ..., 0.565768, 1.14554, 0.420791],
+        #         [1.4328, 0.820314, -0.0266257, ..., 0.0697592, -1.02677, 0.830738],
+        #         ...,
+        #         [0.164638, 0.335743, 0.710777, ..., 0.172818, -0.326656, 0.0479117],
+        #         [-0.466198, 0.0355091, -0.264295, ..., -0.378135, 0.381905, -0.481186],
+        #         [0.474137, 1.21557, -0.281954, ..., 0.562486, -0.0671904, 0.0877942]]], dtype=float32)
+        
+        x += self.pos_embed # position 정보 postion wise 하게 추가
+        # print(x)
+        # array([[[1, 1, 1, ..., 1, 1, 1], > ones로 설정 해놓고 제대로 추가 됐는지 테스트 완료
+        #         [0.374732, 1.08615, 1.38792, ..., 1.56577, 2.14554, 1.42079],
+        #         [2.4328, 1.82031, 0.973374, ..., 1.06976, -0.0267704, 1.83074],
+        #         ...,
+        #         [1.16464, 1.33574, 1.71078, ..., 1.17282, 0.673344, 1.04791],
+        #         [0.533802, 1.03551, 0.735705, ..., 0.621866, 1.38191, 0.518814],
+        #         [1.47414, 2.21557, 0.718046, ..., 1.56249, 0.93281, 1.08779]]], dtype=float32)
         return x
-
 
 def get_vit_base():
     return ViT(patch_size=16, embed_dim=768, 
