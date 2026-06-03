@@ -187,20 +187,26 @@ class ViT(nn.Module):
         print(f"Total trainable parameters: {total:,}")
         return total
 
-def get_vit_base():
-    return ViT(patch_size=16, embed_dim=768, 
+def get_vit_base(img_size=224,patch_size=16, embed_dim=768, 
                num_heads=12, mlp_ratio=4, 
-               dropout_rate=0.1, depth=12)
+               dropout_rate=0.1, depth=12, num_classes=1000):
+    return ViT(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim, 
+            num_heads=num_heads, mlp_ratio=mlp_ratio, 
+            dropout_rate=dropout_rate, depth=depth, num_classes=num_classes)
 
-def get_vit_small():
-    return ViT(patch_size=16, embed_dim=384, 
+def get_vit_small(img_size=224, patch_size=16, embed_dim=384, 
                num_heads=6, mlp_ratio=4, 
-               dropout_rate=0.1, depth=12)
+               dropout_rate=0.1, depth=12, num_classes=1000):
+    return ViT(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim, 
+                num_heads=num_heads, mlp_ratio=mlp_ratio, 
+                dropout_rate=dropout_rate, depth=depth, num_classes=num_classes)
 
-def get_vit_tiny():
-    return ViT(patch_size=16, embed_dim=192, 
+def get_vit_tiny(img_size=224, patch_size=16, embed_dim=192, 
                num_heads=3, mlp_ratio=4, 
-               dropout_rate=0.1, depth=12)
+               dropout_rate=0.1, depth=12, num_classes=1000):
+    return ViT(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim, 
+                num_heads=num_heads, mlp_ratio=mlp_ratio, 
+                dropout_rate=dropout_rate, depth=depth, num_classes=num_classes)
 
 if __name__=="__main__":
 
