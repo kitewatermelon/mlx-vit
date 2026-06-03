@@ -82,18 +82,19 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(self, embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1):
         super().__init__()
-        self.norm = nn.LayerNorm(dims=embed_dim)
+        self.norm1 = nn.LayerNorm(dims=embed_dim) # 별도의 norm1
+        self.norm2 = nn.LayerNorm(dims=embed_dim) # 별도의 norm1
         self.mhsa = MHSA(embed_dim=embed_dim, num_heads=num_heads)
         self.mlp = MLP(embed_dim=embed_dim, mlp_ratio=mlp_ratio, dropout_rate=dropout_rate)
     
     def __call__(self, x):
         # 1단계 - attention: 뭐가 더 중요한지 확인
-        x_norm = self.norm(x) # Layer normalization
+        x_norm = self.norm1(x) # Layer normalization 1
         x_attn, _ = self.mhsa(x_norm) # MHSA
         x = x_attn + x # Residual connection
         
         # 2단계 - MLP: 비선형성 증가
-        x_norm = self.norm(x) # Layer normalization
+        x_norm = self.norm2(x) # Layer normalization 2
         x_mlp = self.mlp(x_norm) # 비선형성 증가를 위한 MLP
         x = x_mlp + x
 
@@ -103,7 +104,7 @@ class ViT(nn.Module):
     """
         cls token based ViT 
     """
-    def __init__(self, img_size=224, patch_size=16, embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1, depth=12):
+    def __init__(self, img_size=224, patch_size=16, embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1, depth=12, num_classes=1000):
         super().__init__()
         self.patch_size = patch_size
         self.embed_dim = embed_dim
@@ -112,10 +113,12 @@ class ViT(nn.Module):
         self.dropout_rate = dropout_rate
         self.depth = depth
         self.num_patches = int((img_size // patch_size) ** 2)
+        
+        self.norm = nn.LayerNorm(dims=embed_dim) # final norm
 
         # self.pos_embed = mx.ones((1, self.num_patches + 1, embed_dim))  # 학습 가능한 파라미터로 position embedding 학습
-        self.pos_embed = mx.random.normal((1, self.num_patches + 1, embed_dim))  # 학습 가능한 파라미터로 position embedding 학습
-        self.cls_token = mx.random.normal((1, 1, embed_dim)) # 학습 가능한 파라미터로 cls 토큰 학습 
+        self.pos_embed = mx.random.normal((1, self.num_patches + 1, embed_dim), scale=0.02)  # 학습 가능한 파라미터로 position embedding 학습
+        self.cls_token = mx.random.normal((1, 1, embed_dim), scale=0.02) # 학습 가능한 파라미터로 cls 토큰 학습 
 
         self.patch_embed = PatchEmbedding(
             patch_size=patch_size, 
@@ -130,6 +133,8 @@ class ViT(nn.Module):
                 dropout_rate=dropout_rate
                 )  for _ in range(depth)
             ]
+        
+        self.head = nn.Linear(embed_dim, num_classes)
 
     def __call__(self, x):
         x = self.patch_embed(x)
@@ -137,7 +142,9 @@ class ViT(nn.Module):
         for i, block in enumerate(self.blocks):
             x = block(x)
             print(f"{i} 번째 layer")
-        return x
+        x = self.norm(x)
+        cls = x[:, 0]       # CLS token만 추출
+        return self.head(cls)
 
     def _pos_embed(self, x):
         x = mx.concatenate((self.cls_token, x), axis=1) # [cls] token N차원의 제일 앞에 concat, axis=1로 해줘야 N+1 됨. (BNC)
@@ -199,19 +206,19 @@ if __name__=="__main__":
     out = block(patches)
     print(out.shape)
 
-    # Total trainable parameters: 85,824,768
+    # Total trainable parameters: 86,613,736
     vit = get_vit_base()
     out = vit(sample)
     print(out.shape)
     vit.get_params_info()
     
-    # Total trainable parameters: 21,678,720
+    # Total trainable parameters: 22,073,704
     vit = get_vit_small()
     out = vit(sample)
     print(out.shape)
     vit.get_params_info()
     
-    # Total trainable parameters: 5,530,944
+    # Total trainable parameters: 5,728,936
     vit = get_vit_tiny()
     out = vit(sample)
     print(out.shape)
