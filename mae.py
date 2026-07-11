@@ -63,6 +63,7 @@ class MAE(nn.Module):
                 dropout_rate=dropout_rate
                 )  for _ in range(depth)
             ]
+        self.encoder_norm = nn.LayerNorm(embed_dim)
         
         # Decoder
         self.decoder_blocks = [
@@ -79,9 +80,10 @@ class MAE(nn.Module):
 
     def __call__(self, imgs):
         latent, restore_indices = self.forward_encoder(imgs, self.mask_ratio)
+        pred = self.forward_decoder(latent, restore_indices)  # [N, L, p*p*3]
+
         return latent, restore_indices
 
-        # pred = self.forward_decoder(latent, restore_indices)  # [N, L, p*p*3]
         # loss = self.forward_loss(imgs, pred, mask)
         # return loss, pred
 
@@ -91,9 +93,17 @@ class MAE(nn.Module):
         x += self.encoder_pos_embed
         # 2. shuffle
         N, L, D = x.shape  # batch, length, dim
-        indices = mx.random.permutation(mx.arange(x.shape[1])) # random permuation 순열 만들기
-        restore_indices = mx.argsort(indices)
-        x_shuffle = x[:,indices,:]
+        
+        indices = mx.stack([mx.random.permutation(mx.arange(L)) for _ in range(N)]) # L개의 random index를 N개 쌓기
+        restore_indices = mx.argsort(indices, axis=1) # argsort()로 원래 index 번호 얻어오기
+        print(indices.shape, restore_indices.shape) # (32, 196) (32, 196)
+
+        # vmap으로 배치 gather
+        def gather_row(x_i, idx_i):
+            return x_i[idx_i]
+
+        x_shuffle = mx.vmap(gather_row)(x, indices)  # (N, L, D)
+        print(x_shuffle.shape) # (32, 196, 192)
         
         # masking
         len_keep = int(L * (1 - mask_ratio))
@@ -102,7 +112,8 @@ class MAE(nn.Module):
         # foreard
         for b in self.encoder_blocks:
             x_masked = b(x_masked)
-        return x_masked, restore_indices
+        
+        return self.encoder_norm(x_masked), restore_indices
     
     def forward_decoder(self, latent, restore_indices):
         pass
@@ -158,3 +169,4 @@ if __name__=="__main__":
     mae.get_params_info()
     z, ids = mae(x)
     print(z.shape, ids.shape)
+    print(ids)
