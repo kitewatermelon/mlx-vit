@@ -17,14 +17,14 @@ class MAE(nn.Module):
                 mask_ratio=0.75,
                 is_rgb=True,     
                        
-                # encoder ViT-T 기준
+                # encoder
                 embed_dim=768, 
                 num_heads=12, 
                 mlp_ratio=4, 
                 dropout_rate=0.1, 
                 depth=12, 
                 
-                # decoder ViT-B에서 4씩 나눈 기준
+                # decoder
                 decoder_embed_dim=512, 
                 decoder_num_heads=8, 
                 decoder_mlp_ratio=4, 
@@ -78,50 +78,42 @@ class MAE(nn.Module):
         self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size**2 * self.in_chans, bias=True) # decoder to patch
 
     def __call__(self, imgs):
-        latent, mask, ids_restore = self.forward_encoder(imgs, self.mask_ratio)
-        pred = self.forward_decoder(latent, ids_restore)  # [N, L, p*p*3]
-        loss = self.forward_loss(imgs, pred, mask)
-        return loss, pred, mask
+        latent, restore_indices = self.forward_encoder(imgs, self.mask_ratio)
+        return latent, restore_indices
+
+        # pred = self.forward_decoder(latent, restore_indices)  # [N, L, p*p*3]
+        # loss = self.forward_loss(imgs, pred, mask)
+        # return loss, pred
 
     def forward_encoder(self, x, mask_ratio):
-        N, L, D = x.shape  # batch, length, dim
-        len_keep = int(L * (1 - mask_ratio))
-        
+        # 1. patchfy
         x = self.patch_embed(x)
         x += self.encoder_pos_embed
-        B, N, C = x.shape
-        print("x: ", x.shape, x[0])
-
-        x_shuffle, ids_restore = self._shuffle(x) # shuffle
-        print("x_shuffle: ", x_shuffle.shape, x_shuffle[0])
-
-        x_masked = self._mask(x_shuffle) # mask
-        # print("x_masked: ", x_masked.shape, x_masked[0])
+        # 2. shuffle
+        N, L, D = x.shape  # batch, length, dim
+        indices = mx.random.permutation(mx.arange(x.shape[1])) # random permuation 순열 만들기
+        restore_indices = mx.argsort(indices)
+        x_shuffle = x[:,indices,:]
+        
+        # masking
+        len_keep = int(L * (1 - mask_ratio))
+        x_masked = x_shuffle[:, :len_keep, :]
+    
+        # foreard
         for b in self.encoder_blocks:
             x_masked = b(x_masked)
-        return x_masked, mask, ids_restore
+        return x_masked, restore_indices
     
-    def forward_decoder(self, latent, ids_restore):
-        for b in self.decoder_blocks:
-            x = b(latent)
-        return x
+    def forward_decoder(self, latent, restore_indices):
+        pass
+        
+        # for b in self.decoder_blocks:
+        #     x = b(latent)
+        # return x
     
     def forward_loss(self, imgs, pred, mask):
         pass
     
-    
-    def _shuffle(self, x):
-        B, N, C = x.shape # 배치, num_patch, channel로 가정하고, patch 단에서 shuffle 할 것
-        indices = mx.random.permutation(mx.arange(x.shape[1])) # random permuation 순열 만들기
-        restore_indices = mx.argsort(indices)
-
-        return x[:,indices,:], restore_indices
-        
-    def _unshuffle(self, x, restore_indices):
-        return x[:,restore_indices,:]
-    
-    def _mask(self, x):
-        return x[:, :int(self.num_patches * (1-self.mask_ratio)), :]
 
     def get_params_info(self):
         params = self.trainable_parameters()
@@ -132,8 +124,37 @@ class MAE(nn.Module):
         print(f"Total trainable parameters: {total:,}")
         return total
 
+
+def mae_base():
+    return MAE(                
+        img_size=224, patch_size=16, mask_ratio=0.75, is_rgb=True,                    
+        # encoder
+        embed_dim=768, num_heads=12, mlp_ratio=4, dropout_rate=0.1, depth=12, 
+        # decoder
+        decoder_embed_dim=512, decoder_num_heads=8, decoder_mlp_ratio=4, decoder_dropout_rate=0.1, decoder_depth=8, 
+        )
+    
+def mae_small():
+    return MAE(                
+        img_size=224, patch_size=16, mask_ratio=0.75, is_rgb=True,                    
+        # encoder
+        embed_dim=384, num_heads=6, mlp_ratio=4, dropout_rate=0.1, depth=12, 
+        # decoder
+        decoder_embed_dim=256, decoder_num_heads=4, decoder_mlp_ratio=4, decoder_dropout_rate=0.1, decoder_depth=6, 
+        )
+
+def mae_tiny():
+    return MAE(                
+        img_size=224, patch_size=16, mask_ratio=0.75, is_rgb=True,                    
+        # encoder
+        embed_dim=192, num_heads=3, mlp_ratio=4, dropout_rate=0.1, depth=12, 
+        # decoder
+        decoder_embed_dim=128, decoder_num_heads=2, decoder_mlp_ratio=4, decoder_dropout_rate=0.1, decoder_depth=4, 
+        )
+
 if __name__=="__main__":
     x = mx.random.normal([32, 224, 224, 3])
-    mae = MAE(mask_ratio=0.75)
-    print(mae.get_params_info())
-    z = mae(x)
+    mae = mae_tiny()
+    mae.get_params_info()
+    z, ids = mae(x)
+    print(z.shape, ids.shape)
