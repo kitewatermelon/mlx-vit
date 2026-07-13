@@ -90,7 +90,7 @@ class MAE(nn.Module):
         self.decoder_pos_embed = mx.array(decoder_pos_embed).reshape(1, self.num_patches, -1)
 
         # mask_token
-        self.mask_token = mx.random.normal((1, 1, self.decoder_embed_dim), scale=0.02)
+        self.mask_token = mx.random.normal((1, 1, self.decoder_embed.weight.shape[0]), scale=0.02)
         # Linear, LayerNorm 초기화
         def init_weights(module):
             if isinstance(module, nn.Linear):
@@ -116,7 +116,7 @@ class MAE(nn.Module):
         # 2. shuffle
         N, L, D = x.shape  # batch, length, dim 
         
-        indices = mx.stack([mx.random.permutation(mx.arange(L)) for _ in range(N)]) # L개의 random index를 N개 쌓기
+        indices = mx.argsort(mx.random.uniform(shape=(N, L)), axis=1)  # 배치 전체를 한 번에 벡터화된 random permutation
         restore_indices = mx.argsort(indices, axis=1) # argsort()로 원래 index 번호 얻어오기
         x_shuffle = mx.vmap(lambda x_i, idx_i: x_i[idx_i])(x, indices)  # (N, L, D)
         
@@ -125,8 +125,7 @@ class MAE(nn.Module):
         x_masked = x_shuffle[:, :len_keep, :]
         
         # shuffle 순서로 mask 만들기 (앞 len_keep = 0, 뒤 masked = 1)
-        mask = mx.ones((N, L))
-        mask[:, :len_keep] = 0  # kept 부분은 0        
+        mask = mx.concatenate([mx.zeros((N, len_keep)), mx.ones((N, L - len_keep))], axis=1)
         # restore_indices로 원본 순서로 되돌리기
         mask = mx.vmap(lambda m, r: m[r])(mask, restore_indices)        
 
@@ -222,9 +221,19 @@ def mae_tiny():
         decoder_embed_dim=128, decoder_num_heads=2, decoder_mlp_ratio=4, decoder_dropout_rate=0.1, decoder_depth=4, 
         )
 
+def mae_cifar10():
+    return MAE(                
+        img_size=32, patch_size=4, mask_ratio=0.75, is_rgb=True,
+        # encoder
+        embed_dim=192, num_heads=3, mlp_ratio=4, dropout_rate=0.1, depth=12, 
+        # decoder
+        decoder_embed_dim=128, decoder_num_heads=2, decoder_mlp_ratio=4, decoder_dropout_rate=0.1, decoder_depth=4, 
+        )
+
 if __name__=="__main__":
-    x = mx.random.normal([32, 224, 224, 3])
-    mae = mae_tiny()
+    x = mx.random.normal([32, 32, 32, 3])
+    mae = mae_cifar10()
     mae.get_params_info()
     loss, pred = mae(x)
     x_pred = mae.unpatchfy(pred)
+    print(loss, pred.shape, x_pred.shape)

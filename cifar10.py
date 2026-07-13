@@ -4,7 +4,6 @@ import mlx.core as mx
 import numpy as np
 from mlx.data.datasets import load_cifar10
 
-
 def get_cifar10(batch_size, root="./data"):
     tr = load_cifar10(root=root)
 
